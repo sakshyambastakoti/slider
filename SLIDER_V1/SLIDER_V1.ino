@@ -38,10 +38,18 @@ constexpr uint32_t DEBUG_BAUD_RATE = 115200;
 // Target Button Hardware Configuration (Classic ESP32 built-in BOOT button)
 constexpr uint8_t BUTTON_PIN = 0;
 
+// Built-in status LED (GPIO 2 on standard Classic ESP32 DevKit boards)
+#ifdef LED_BUILTIN
+constexpr uint8_t LED_PIN = LED_BUILTIN;
+#else
+constexpr uint8_t LED_PIN = 2;
+#endif
+
 // Timing Configurations (in milliseconds)
 constexpr uint32_t DEBOUNCE_MS             = 30;   // Debounce window to filter mechanical chatter
 constexpr uint32_t DOUBLE_PRESS_WINDOW_MS = 300;  // Double-press detection window
 constexpr uint32_t KEY_STROKE_DELAY_MS    = 20;   // Key hold duration before release
+constexpr uint32_t LED_BLINK_DISCONNECTED_MS = 150; // LED rapid blink interval (150ms toggle)
 
 // Bluetooth HID Device Profile
 constexpr char DEVICE_NAME[]         = "SLIDER";
@@ -265,10 +273,50 @@ private:
 };
 
 // =============================================================================
-// 4. MAIN APPLICATION
+// 4. LED STATUS MANAGER
+// =============================================================================
+class LedManager {
+public:
+    LedManager()
+        : _lastToggleMs(0)
+        , _ledState(false)
+    {}
+
+    void init() {
+        pinMode(LED_PIN, OUTPUT);
+        digitalWrite(LED_PIN, LOW);
+        _ledState = false;
+        DEBUG_PRINTF("[SLIDER] Initialized built-in LED on GPIO %d\n", LED_PIN);
+    }
+
+    void update(uint32_t now, bool isConnected) {
+        if (isConnected) {
+            // Solid constant glow when connected
+            if (!_ledState) {
+                digitalWrite(LED_PIN, HIGH);
+                _ledState = true;
+            }
+        } else {
+            // Rapid blink when disconnected
+            if (now - _lastToggleMs >= LED_BLINK_DISCONNECTED_MS) {
+                _lastToggleMs = now;
+                _ledState = !_ledState;
+                digitalWrite(LED_PIN, _ledState ? HIGH : LOW);
+            }
+        }
+    }
+
+private:
+    uint32_t _lastToggleMs;
+    bool     _ledState;
+};
+
+// =============================================================================
+// 5. MAIN APPLICATION
 // =============================================================================
 static ButtonManager g_buttonManager;
 static HidManager    g_hidManager;
+static LedManager    g_ledManager;
 
 void setup() {
 #if DEBUG_ENABLED
@@ -281,7 +329,13 @@ void setup() {
     Serial.println("[SLIDER] Booting firmware...");
 #endif
 
+    // 1. Initialize status LED
+    g_ledManager.init();
+
+    // 2. Initialize button
     g_buttonManager.init();
+
+    // 3. Initialize Bluetooth HID
     g_hidManager.init();
 
 #if DEBUG_ENABLED
@@ -294,13 +348,16 @@ void setup() {
 void loop() {
     const uint32_t now = millis();
 
-    // Monitor Bluetooth lifecycle
+    // 1. Monitor Bluetooth lifecycle
     g_hidManager.update();
 
-    // Process non-blocking button state machine
+    // 2. Update status LED (rapid blink if disconnected, solid if connected)
+    g_ledManager.update(now, g_hidManager.isConnected());
+
+    // 3. Process non-blocking button state machine
     const ButtonEvent event = g_buttonManager.update(now);
 
-    // Dispatch presentation actions
+    // 4. Dispatch presentation actions
     switch (event) {
         case ButtonEvent::SINGLE_PRESS:
             g_hidManager.sendNextSlide();

@@ -28,6 +28,13 @@ constexpr uint32_t DEBUG_BAUD_RATE = 115200;
 // Built-in BOOT button on standard Classic ESP32 boards (active LOW with pull-up)
 constexpr uint8_t BUTTON_PIN = 0;
 
+// Built-in status LED on standard Classic ESP32 boards (GPIO 2 on DevKit V1)
+#ifdef LED_BUILTIN
+constexpr uint8_t LED_PIN = LED_BUILTIN;
+#else
+constexpr uint8_t LED_PIN = 2;
+#endif
+
 // -----------------------------------------------------------------------------
 // 3. Timing Parameters (in milliseconds)
 // -----------------------------------------------------------------------------
@@ -39,6 +46,9 @@ constexpr uint32_t DOUBLE_PRESS_WINDOW_MS = 300;
 
 // Duration the HID key is held down before release to ensure host OS recognition
 constexpr uint32_t KEY_STROKE_DELAY_MS = 20;
+
+// LED rapid blink interval when Bluetooth is disconnected (150ms toggle)
+constexpr uint32_t LED_BLINK_DISCONNECTED_MS = 150;
 
 // -----------------------------------------------------------------------------
 // 4. Bluetooth HID Identity
